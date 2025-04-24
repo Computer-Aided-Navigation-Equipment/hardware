@@ -1,6 +1,6 @@
 # Smart Cane Project
 
-This project integrates multiple sensors and peripherals with a Raspberry Pi to collect data, capture images, and provide feedback through a buzzer. The setup includes GPS, LiDAR, a camera, and a buzzer.
+This project integrates multiple sensors and peripherals with a Raspberry Pi to collect data, capture images, and provide feedback through a buzzer. The setup includes GPS, LiDAR, a camera, a temperature sensor, and a buzzer.
 
 ## Features
 
