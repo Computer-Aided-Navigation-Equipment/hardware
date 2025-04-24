@@ -82,7 +82,7 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
    ```
 3. The script will:
    - Continuously read GPS coordinates and print them.
-   - Collect LiDAR data and print the first 5 points.
+   - Collect LiDAR data and print the points.
    - Capture an image and save it with a timestamped filename.
    - Measure the ambient and object temperature using the MLX90614 sensor.
    - Beep the buzzer for feedback.
