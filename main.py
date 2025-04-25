@@ -16,7 +16,7 @@ import requests
 from boto3 import client
 from dotenv import load_dotenv
 from datetime import datetime
-from gpiozero import Buzzer  # Added for buzzer functionality
+from gpiozero import Buzzer
 
 # Load environment variables from .env file
 load_dotenv()
@@ -54,7 +54,8 @@ picam2.start()
 gps_serial = serial.Serial("/dev/ttyAMA0", baudrate=9600, timeout=1)
 
 # === AWS S3 Client Setup ===
-s3 = client('s3', region_name=os.getenv('AWS_REGION'), 
+s3 = client('s3', 
+            region_name=os.getenv('AWS_REGION'), 
             aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
             aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'))
 
@@ -86,10 +87,10 @@ def get_gps_location():
 def get_geocoder_location():
     try:
         g = geocoder.ip('me')
-        if g.ok:
+        if g.ok and g.latlng and len(g.latlng) >= 2:
             return g.latlng[0], g.latlng[1]
         else:
-            print("Geocoder failed to get location")
+            print("Geocoder failed to get valid location")
     except Exception as e:
         print(f"Geocoder error: {e}")
     return None, None
@@ -100,23 +101,27 @@ def draw_lidar_on_image(image, scan):
     scale = 3  # tweak this to zoom in/out on points
 
     for (_, angle, distance) in scan:
-        # Align LIDAR to match camera POV (rotate 90° counter-clockwise)
         radians = np.radians(angle - 90)
         x = int(center_x + scale * distance * np.cos(radians))
         y = int(center_y + scale * distance * np.sin(radians))
         if 0 <= x < width and 0 <= y < height:
-            cv2.circle(image, (x, y), 10, (0, 0, 255), -1)  # BIG AF red dots
+            cv2.circle(image, (x, y), 10, (0, 0, 255), -1)
 
     return image
 
 def upload_image_to_s3(image_path, bucket_name):
     try:
+        if not os.path.exists(image_path):
+            print(f"Image file not found: {image_path}")
+            return None
+            
         file_name = os.path.basename(image_path)
-        s3.upload_file(image_path, bucket_name, file_name)
+        with open(image_path, 'rb') as file:
+            s3.upload_fileobj(file, bucket_name, file_name)
         url = f"https://{bucket_name}.s3.{os.getenv('AWS_REGION')}.amazonaws.com/{file_name}"
         return url
     except Exception as e:
-        print(f"Error uploading to S3: {e}")
+        print(f"Error uploading to S3: {str(e)}")
         return None
 
 def authenticate_user(email, password):
@@ -138,11 +143,14 @@ def authenticate_user(email, password):
         return None, None
 
 def save_location_to_db(user_id, jwt_token, lat, lng):
+    if lat is None or lng is None:
+        print("No location data to save")
+        return
+        
+    location_str = f"{lat},{lng}"
     location_data = {
-        "location": {
-            "lat": lat,
-            "lng": lng
-        }
+        "location": location_str,
+        "title": f"Auto-location {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     }
     try:
         response = requests.post(
@@ -150,14 +158,18 @@ def save_location_to_db(user_id, jwt_token, lat, lng):
             json=location_data,
             headers={'Authorization': f'Bearer {jwt_token}'}
         )
-        if response.status_code == 200:
-            print("Location saved to MongoDB")
+        if response.status_code in [200, 201]:
+            print(f"Location saved successfully: {response.json().get('message')}")
         else:
             print(f"Error saving location: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Error saving location to MongoDB: {e}")
 
 def save_image_url_to_db(user_id, jwt_token, image_url):
+    if not image_url:
+        print("No image URL to save")
+        return
+        
     attachment_data = {
         "url": image_url,
         "key": image_url.split("/")[-1],
@@ -169,8 +181,8 @@ def save_image_url_to_db(user_id, jwt_token, image_url):
             json=attachment_data,
             headers={'Authorization': f'Bearer {jwt_token}'}
         )
-        if response.status_code == 200:
-            print("Image URL saved to MongoDB")
+        if response.status_code in [200, 201]:
+            print(f"Image URL saved successfully: {response.json().get('message')}")
         else:
             print(f"Error saving image URL: {response.status_code} - {response.text}")
     except Exception as e:
@@ -190,8 +202,8 @@ def save_path_log_to_db(user_id, jwt_token, location, description, miles, obstac
             json=path_log_data,
             headers={'Authorization': f'Bearer {jwt_token}'}
         )
-        if response.status_code == 200:
-            print("Path Log saved to MongoDB")
+        if response.status_code in [200, 201]:
+            print(f"Path Log saved successfully: {response.json().get('message')}")
         else:
             print(f"Error saving path log: {response.status_code} - {response.text}")
     except Exception as e:
@@ -236,7 +248,7 @@ try:
     min_dist = min(distances) if distances else float('inf')
     if min_dist < 300:  # 300 mm threshold
         print(f"Object detected at {min_dist} mm - activating buzzer!")
-        buzz(3)  # Buzz 3 times
+        buzz(3)
 
     # === 4. Location Detection ===
     lat = lng = None
@@ -252,9 +264,14 @@ try:
     print(f"Location source: {location_source}")
     if lat is not None and lng is not None:
         print(f"Coordinates: Latitude {lat:.6f}, Longitude {lng:.6f}")
+        location_str = f"{lat},{lng}"
+    else:
+        location_str = None
 
     # === 5. Capture Camera Image ===
     frame = picam2.capture_array()
+    if len(frame.shape) == 3 and frame.shape[2] == 3:
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     fused_image = draw_lidar_on_image(frame, scan)
 
     # Add Temperature and GPS Data on the Image
@@ -268,39 +285,45 @@ try:
     else:
         location_text = "Location: Unavailable"
 
-    # Draw the temperature and GPS text on the image
     cv2.putText(fused_image, temp_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
     cv2.putText(fused_image, location_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
 
     # === YOLOv5 DETECTION ===
     results = model(fused_image)
-    results.show()  # Display image with detections
+    results.show()
     
-    # Check for detected objects and buzz if needed
     detections = results.pandas().xyxy[0]
     if not detections.empty:
         print("Objects detected:", detections['name'].tolist())
-        buzz(2)  # Buzz twice when objects are detected
+        buzz(2)
 
     # === Upload Image to S3 and Save URL ===
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     image_path = f"/tmp/image_{timestamp}.jpg"
-    cv2.imwrite(image_path, fused_image)
-
-    image_url = upload_image_to_s3(image_path, os.getenv('AWS_BUCKET_NAME'))
-    if image_url:
-        print(f"Image uploaded to S3: {image_url}")
-        save_image_url_to_db(user_id, jwt_token, image_url)
+    try:
+        cv2.imwrite(image_path, cv2.cvtColor(fused_image, cv2.COLOR_RGB2BGR))
+        
+        bucket_name = os.getenv('AWS_BUCKET_NAME')
+        if bucket_name:
+            image_url = upload_image_to_s3(image_path, bucket_name)
+            if image_url:
+                print(f"Image uploaded to S3: {image_url}")
+                save_image_url_to_db(user_id, jwt_token, image_url)
+            else:
+                print("Failed to upload image to S3")
+        else:
+            print("AWS_BUCKET_NAME environment variable not set")
+    except Exception as e:
+        print(f"Error saving/uploading image: {e}")
 
     # === Save Location Data ===
-    if lat is not None and lng is not None:
-        save_location_to_db(user_id, jwt_token, lat, lng)
+    save_location_to_db(user_id, jwt_token, lat, lng)
 
     # === Path Log Update ===
     save_path_log_to_db(
         user_id, 
         jwt_token,
-        {"lat": lat, "lng": lng} if lat and lng else None,
+        location_str,
         "Automatic path log entry",
         0.0,
         str(detections['name'].tolist()),
@@ -311,11 +334,11 @@ except KeyboardInterrupt:
     print("Program terminated by user.")
 except Exception as e:
     print(f"Unexpected error: {e}")
-    buzz(5, on=0.2, off=0.2)  # Long buzz pattern for errors
+    buzz(5, on=0.2, off=0.2)
 
 finally:
     lidar.stop()
     lidar.disconnect()
     picam2.stop()
-    buzzer.off()  # Ensure buzzer is turned off
+    buzzer.off()
     print("Shutdown complete.")
