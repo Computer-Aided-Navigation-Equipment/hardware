@@ -12,13 +12,25 @@ import numpy as np
 import torch
 import os
 import jwt
-import requests  # For handling HTTP requests to the backend
-from boto3 import client  # AWS S3 client
-from dotenv import load_dotenv  # Import dotenv
+import requests
+from boto3 import client
+from dotenv import load_dotenv
 from datetime import datetime
+from gpiozero import Buzzer  # Added for buzzer functionality
 
 # Load environment variables from .env file
 load_dotenv()
+
+# === Hardware setup with gpiozero ===
+buzzer = Buzzer(17)  # Initialize buzzer on GPIO pin 17
+
+def buzz(times, on=0.1, off=0.1):
+    """Activate buzzer with specified pattern"""
+    for _ in range(times):
+        buzzer.on()
+        time.sleep(on)
+        buzzer.off()
+        time.sleep(off)
 
 # === Load YOLOv5 Model ===
 model = torch.hub.load("ultralytics/yolov5", "yolov5s", trust_repo=True)
@@ -98,7 +110,6 @@ def draw_lidar_on_image(image, scan):
     return image
 
 def upload_image_to_s3(image_path, bucket_name):
-    # Upload image to AWS S3 and return URL
     try:
         file_name = os.path.basename(image_path)
         s3.upload_file(image_path, bucket_name, file_name)
@@ -109,20 +120,24 @@ def upload_image_to_s3(image_path, bucket_name):
         return None
 
 def authenticate_user(email, password):
-    # Send a request to the backend to authenticate the user and get the user ID
+    """Authenticate user and return user data and JWT token"""
     try:
-        response = requests.post('http://localhost:6001/api/user/login', data={'email': email, 'password': password})
+        response = requests.post(
+            'http://localhost:6001/api/user/login',
+            json={'email': email, 'password': password}
+        )
         if response.status_code == 200:
             data = response.json()
-            return data.get('userId'), data.get('jwtToken')  # Return userId and JWT token
+            print("Authentication successful")
+            return data.get('user'), data.get('accessToken')
         else:
-            print("Authentication failed")
+            print(f"Authentication failed: {response.status_code} - {response.text}")
             return None, None
     except Exception as e:
         print(f"Authentication error: {e}")
         return None, None
 
-def save_location_to_db(user_id, lat, lng):
+def save_location_to_db(user_id, jwt_token, lat, lng):
     location_data = {
         "location": {
             "lat": lat,
@@ -130,30 +145,38 @@ def save_location_to_db(user_id, lat, lng):
         }
     }
     try:
-        response = requests.post('http://localhost:6001/api/location/create', json=location_data, headers={'Authorization': f'Bearer {user_id}'})
+        response = requests.post(
+            'http://localhost:6001/api/location/create',
+            json=location_data,
+            headers={'Authorization': f'Bearer {jwt_token}'}
+        )
         if response.status_code == 200:
             print("Location saved to MongoDB")
         else:
-            print("Error saving location to MongoDB")
+            print(f"Error saving location: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Error saving location to MongoDB: {e}")
 
-def save_image_url_to_db(user_id, image_url):
+def save_image_url_to_db(user_id, jwt_token, image_url):
     attachment_data = {
         "url": image_url,
-        "key": image_url.split("/")[-1],  # Extract the key from the URL
+        "key": image_url.split("/")[-1],
         "mimeType": "image/jpeg"
     }
     try:
-        response = requests.post('http://localhost:6001/api/attachment/create', json=attachment_data, headers={'Authorization': f'Bearer {user_id}'})
+        response = requests.post(
+            'http://localhost:6001/api/attachment/create',
+            json=attachment_data,
+            headers={'Authorization': f'Bearer {jwt_token}'}
+        )
         if response.status_code == 200:
             print("Image URL saved to MongoDB")
         else:
-            print("Error saving image URL to MongoDB")
+            print(f"Error saving image URL: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Error saving image URL to MongoDB: {e}")
 
-def save_path_log_to_db(user_id, location, description, miles, obstacles, steps):
+def save_path_log_to_db(user_id, jwt_token, location, description, miles, obstacles, steps):
     path_log_data = {
         "location": location,
         "description": description,
@@ -162,11 +185,15 @@ def save_path_log_to_db(user_id, location, description, miles, obstacles, steps)
         "steps": steps
     }
     try:
-        response = requests.post('http://localhost:6001/api/log/create', json=path_log_data, headers={'Authorization': f'Bearer {user_id}'})
+        response = requests.post(
+            'http://localhost:6001/api/log/create',
+            json=path_log_data,
+            headers={'Authorization': f'Bearer {jwt_token}'}
+        )
         if response.status_code == 200:
             print("Path Log saved to MongoDB")
         else:
-            print("Error saving path log to MongoDB")
+            print(f"Error saving path log: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Error saving path log to MongoDB: {e}")
 
@@ -178,12 +205,15 @@ try:
     print(f"Health status: {status}, Error code: {error_code}")
 
     # === 1. User Authentication ===
-    email = input("Enter your email: ")  # User inputs their email
-    password = input("Enter your password: ")  # User inputs their password
-    user_id, jwt_token = authenticate_user(email, password)
-    if not user_id:
-        print("User authentication failed.")
+    email = input("Enter your email: ")
+    password = input("Enter your password: ")
+    user_data, jwt_token = authenticate_user(email, password)
+    if not user_data or not jwt_token:
+        print("User authentication failed. Exiting...")
         exit()
+
+    user_id = user_data.get('_id')
+    print(f"Authenticated as user ID: {user_id}")
 
     # === 2. Temperature Sensor ===
     ambient_temp = object_temp = None
@@ -200,6 +230,13 @@ try:
     scan = next(lidar.iter_scans(max_buf_meas=6000))
     point_count = len(scan)
     print(f"LIDAR scan complete. Points scanned: {point_count}")
+    
+    # Check for nearby objects and trigger buzzer
+    distances = [m[2] for m in scan]
+    min_dist = min(distances) if distances else float('inf')
+    if min_dist < 300:  # 300 mm threshold
+        print(f"Object detected at {min_dist} mm - activating buzzer!")
+        buzz(3)  # Buzz 3 times
 
     # === 4. Location Detection ===
     lat = lng = None
@@ -212,6 +249,10 @@ try:
         lat, lng = get_geocoder_location()
         location_source = "Geocoder (Indoor via IP)"
 
+    print(f"Location source: {location_source}")
+    if lat is not None and lng is not None:
+        print(f"Coordinates: Latitude {lat:.6f}, Longitude {lng:.6f}")
+
     # === 5. Capture Camera Image ===
     frame = picam2.capture_array()
     fused_image = draw_lidar_on_image(frame, scan)
@@ -223,7 +264,7 @@ try:
         temp_text = "Temperature: Unavailable"
 
     if lat is not None and lng is not None:
-        location_text = f"Lat: {lat:.6f}, Lng: {lng:.6f}"
+        location_text = f"Lat: {lat:.6f}, Lng: {lng:.6f} ({location_source})"
     else:
         location_text = "Location: Unavailable"
 
@@ -234,6 +275,12 @@ try:
     # === YOLOv5 DETECTION ===
     results = model(fused_image)
     results.show()  # Display image with detections
+    
+    # Check for detected objects and buzz if needed
+    detections = results.pandas().xyxy[0]
+    if not detections.empty:
+        print("Objects detected:", detections['name'].tolist())
+        buzz(2)  # Buzz twice when objects are detected
 
     # === Upload Image to S3 and Save URL ===
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -242,20 +289,33 @@ try:
 
     image_url = upload_image_to_s3(image_path, os.getenv('AWS_BUCKET_NAME'))
     if image_url:
-        save_image_url_to_db(user_id, image_url)
+        print(f"Image uploaded to S3: {image_url}")
+        save_image_url_to_db(user_id, jwt_token, image_url)
 
     # === Save Location Data ===
     if lat is not None and lng is not None:
-        save_location_to_db(user_id, lat, lng)
+        save_location_to_db(user_id, jwt_token, lat, lng)
 
     # === Path Log Update ===
-    save_path_log_to_db(user_id, (lat, lng), "Sample Description", 0.0, "None", "Steps Taken: 0")
+    save_path_log_to_db(
+        user_id, 
+        jwt_token,
+        {"lat": lat, "lng": lng} if lat and lng else None,
+        "Automatic path log entry",
+        0.0,
+        str(detections['name'].tolist()),
+        point_count
+    )
     
 except KeyboardInterrupt:
     print("Program terminated by user.")
+except Exception as e:
+    print(f"Unexpected error: {e}")
+    buzz(5, on=0.2, off=0.2)  # Long buzz pattern for errors
 
 finally:
     lidar.stop()
     lidar.disconnect()
     picam2.stop()
-    print("Shutting down.")
+    buzzer.off()  # Ensure buzzer is turned off
+    print("Shutdown complete.")
