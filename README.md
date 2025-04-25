@@ -107,12 +107,12 @@ The script includes a cleanup routine to:
 
 ## Block Diagram
 
-![block_diagram](https://github.com/user-attachments/assets/7c0f39c4-3ba5-4707-88f6-7dafce2cc49a)
+![block_diagram](https://github.com/user-attachments/assets/110aae23-9228-46e6-a3f6-a9af200b2ada)
 
 ## Schematic Diagram
 
-![schematic_diagram](https://github.com/user-attachments/assets/29a96483-bc5b-4144-a3b7-6f4fbfbbe142)
+![schematic_diagram](https://github.com/user-attachments/assets/87a190c7-600c-4a28-95a1-88e7277d0675)
 
 ## Wiring Diagram
 
-![wiring_diagram](https://github.com/user-attachments/assets/4e66634d-26fb-49dc-938d-bf6185cd84b5)
+![wiring_diagram](https://github.com/user-attachments/assets/6f58eb5d-45bb-4e47-90b2-e1dc65afd0fd)
