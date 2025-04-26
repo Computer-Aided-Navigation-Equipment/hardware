@@ -66,6 +66,9 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
    PORT=6001
    DBURI=<your-mongodb-uri>
    JWT_SECRET=<your-jwt-secret>
+
+   BREVO_API_KEY=<your brevo-api-key>
+   FRONTEND_URL=<your frontend-url>
    
    AWS_ACCESS_KEY_ID=<your-aws-access-key-id>
    AWS_SECRET_ACCESS_KEY=<your-aws-secret-access-key>
