@@ -13,7 +13,6 @@ import torch
 import os
 import jwt
 import requests
-from boto3 import client
 from dotenv import load_dotenv
 from datetime import datetime
 from gpiozero import Buzzer
@@ -51,16 +50,6 @@ picam2.start()
 
 # === Setup Serial for GPS ===
 gps_serial = serial.Serial("/dev/ttyAMA0", baudrate=9600, timeout=1)
-
-# === AWS S3 Client Setup ===
-try:
-    s3 = client('s3', 
-                region_name=os.getenv('AWS_REGION'), 
-                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'))
-except Exception as e:
-    print(f"Error initializing S3 client: {e}")
-    s3 = None
 
 # === Helper Functions ===
 def initialize_lidar():
@@ -127,24 +116,6 @@ def draw_lidar_on_image(image, scan):
             cv2.circle(image, (x, y), 10, (0, 0, 255), -1)
 
     return image
-
-def upload_image_to_s3(image_path, bucket_name):
-    if not s3:
-        print("S3 client not initialized")
-        return None
-    try:
-        if not os.path.exists(image_path):
-            print(f"Image file not found: {image_path}")
-            return None
-            
-        file_name = os.path.basename(image_path)
-        with open(image_path, 'rb') as file:
-            s3.upload_fileobj(file, bucket_name, file_name)
-        url = f"https://{bucket_name}.s3.{os.getenv('AWS_REGION')}.amazonaws.com/{file_name}"
-        return url
-    except Exception as e:
-        print(f"Error uploading to S3: {str(e)}")
-        return None
 
 def authenticate_user(email, password):
     """Authenticate user and return user data and JWT token"""
@@ -354,24 +325,14 @@ def main_loop():
                 print("Objects detected:", detections['name'].tolist())
                 buzz(2)
 
-            # === 6. Upload Image to S3 and Save URL ===
-            bucket_name = os.getenv('S3_BUCKET_NAME')
-            if bucket_name:
-                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                image_path = f"/tmp/image_{timestamp}.jpg"
-                try:
-                    cv2.imwrite(image_path, cv2.cvtColor(fused_image, cv2.COLOR_RGB2BGR))
-                    
-                    image_url = upload_image_to_s3(image_path, bucket_name)
-                    if image_url:
-                        print(f"Image uploaded to S3: {image_url}")
-                        save_image_url_to_db(user_id, jwt_token, image_url)
-                    else:
-                        print("Failed to upload image to S3")
-                except Exception as e:
-                    print(f"Error saving/uploading image: {e}")
-            else:
-                print("S3_BUCKET_NAME environment variable not set - skipping S3 upload")
+            # === 6. Save Image Locally ===
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            image_path = f"/tmp/image_{timestamp}.jpg"
+            try:
+                cv2.imwrite(image_path, cv2.cvtColor(fused_image, cv2.COLOR_RGB2BGR))
+                print(f"Image saved locally: {image_path}")
+            except Exception as e:
+                print(f"Error saving image: {e}")
 
             # === 7. Save Location Data ===
             save_location_to_db(user_id, jwt_token, lat, lng)
