@@ -10,7 +10,6 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
 - **Buzzer**: Provides audible feedback.
 - **Temperature Sensor (MLX90614)**: Measures ambient and object temperature.
 - **Object Detection (YOLOv5)**: Detects objects in the captured images.
-- **AWS S3 Integration**: Uploads captured images to AWS S3 and stores URLs in MongoDB.
 
 ## Requirements
 
@@ -24,7 +23,6 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
   - `pynmea2`
   - `torch` (for YOLOv5)
   - `requests`
-  - `boto3` (for AWS S3)
   - `dotenv`
   - `adafruit-mlx90614`
   - `geocoder`
@@ -89,7 +87,6 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
    - Capture an image and save it with a timestamped filename.
    - Measure the ambient and object temperature using the MLX90614 sensor.
    - Beep the buzzer for feedback.
-   - Upload the image to AWS S3 and store the URL in MongoDB.
    - Log the location, path, and temperature data in MongoDB.
 
 ## Notes
@@ -98,7 +95,7 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
 - The LiDAR should be placed in an open area for effective scanning.
 - Modify the GPIO pin for the buzzer if needed.
 - The MLX90614 temperature sensor needs to be connected to the I2C pins. Ensure I2C is enabled on the Raspberry Pi.
-- Make sure to have a valid AWS account and configure your credentials properly in the .env file.
+- Make sure to configure your credentials properly in the .env file.
 
 ## Cleanup
 
