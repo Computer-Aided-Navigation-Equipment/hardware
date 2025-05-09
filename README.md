@@ -44,6 +44,7 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
 
 2. **Install dependencies**:
    ```bash
+   # Install libraries
    pip install pyserial rplidar-roboticia requests boto3 python-dotenv geocoder adafruit-circuitpython-mlx90614
 
    # Clone the YOLOv5 repository
