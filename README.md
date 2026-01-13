@@ -16,6 +16,7 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
 - Raspberry Pi (with GPIO support)
 - Python 3
 - Installed libraries:
+
   - `serial`
   - `RPi.GPIO`
   - `cv2` (OpenCV)
@@ -26,7 +27,9 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
   - `dotenv`
   - `adafruit-mlx90614`
   - `geocoder`
+
 - Hardware:
+
   - GPS Module (GY-GPS6MV2, NEO-6M)
   - RPLIDAR A1/A2
   - Raspberry Pi Camera
@@ -36,6 +39,7 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
 ## Setup
 
 1. **Connect the hardware**:
+
    - Connect the GPS module to the Raspberry Pi's UART pins.
    - Connect the LiDAR to a USB port.
    - Connect the camera to the Raspberry Pi's camera interface.
@@ -43,6 +47,7 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
    - Connect the MLX90614 temperature sensor to the I2C pins of the Raspberry Pi.
 
 2. **Install dependencies**:
+
    ```bash
    # Install libraries
    pip install pyserial rplidar-roboticia requests boto3 python-dotenv geocoder adafruit-circuitpython-mlx90614
@@ -61,6 +66,7 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
    - Run `sudo raspi-config` and enable the camera interface.
   
 4. **Create a `.env` file for storing AWS credentials and other environment variables**:
+
    ```env
    PORT=6001
    DBURI=<your-mongodb-uri>
