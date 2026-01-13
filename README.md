@@ -85,10 +85,13 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
 
 1. Clone or copy the project to your Raspberry Pi.
 2. Run the script:
+
    ```bash
    python3 main.py
    ```
+
 3. The script will:
+
    - Continuously read GPS coordinates and print them.
    - Collect LiDAR data and print the points.
    - Capture an image and save it with a timestamped filename.
