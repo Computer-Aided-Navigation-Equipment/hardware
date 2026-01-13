@@ -60,7 +60,7 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
 3. **Enable camera support**:
    - Run `sudo raspi-config` and enable the camera interface.
   
-4. **Create a `.env` file for storing AWS credentials and other environment variables:**:
+4. **Create a `.env` file for storing AWS credentials and other environment variables**:
    ```env
    PORT=6001
    DBURI=<your-mongodb-uri>
@@ -101,6 +101,7 @@ This project integrates multiple sensors and peripherals with a Raspberry Pi to 
 ## Cleanup
 
 The script includes a cleanup routine to:
+
 - Close the GPS serial connection.
 - Stop and disconnect the LiDAR.
 - Release the camera.
